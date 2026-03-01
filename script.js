@@ -183,7 +183,139 @@ setInterval(function () {
     }
 }, 4000);
 
-// ===== ENVELOPE → LETTER OVERLAY =====
+// ===== ENVELOPE → WORD SEARCH → LETTER =====
+var wsOverlay = document.getElementById('wordsearchOverlay');
+var wsGrid = document.getElementById('wsGrid');
+var wsSelected = document.getElementById('wsSelected');
+var wsStatus = document.getElementById('wsStatus');
+var wsCloseBtn = document.getElementById('wsClose');
+var SECRET_WORD = 'THAICURRY';
+var wsSelectedLetters = [];
+var wsSelectedCells = [];
+var wsSolved = false;
+var wordCells = []; // track which cells hold the secret word
+
+function generateWordSearch() {
+    var GRID_SIZE = 9;
+    var grid = [];
+    var randomLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+    // Create empty grid
+    for (var r = 0; r < GRID_SIZE; r++) {
+        grid[r] = [];
+        for (var c = 0; c < GRID_SIZE; c++) {
+            grid[r][c] = randomLetters[Math.floor(Math.random() * 26)];
+        }
+    }
+
+    // Place THAICURRY in a random row at a random starting column
+    var row = Math.floor(Math.random() * GRID_SIZE);
+    var maxCol = GRID_SIZE - SECRET_WORD.length;
+    var col = Math.floor(Math.random() * (maxCol + 1));
+    wordCells = [];
+    for (var i = 0; i < SECRET_WORD.length; i++) {
+        grid[row][col + i] = SECRET_WORD[i];
+        wordCells.push({ r: row, c: col + i });
+    }
+
+    // Render grid
+    wsGrid.innerHTML = '';
+    for (var r = 0; r < GRID_SIZE; r++) {
+        for (var c = 0; c < GRID_SIZE; c++) {
+            var cell = document.createElement('div');
+            cell.className = 'ws-cell';
+            cell.textContent = grid[r][c];
+            cell.dataset.row = r;
+            cell.dataset.col = c;
+            cell.dataset.letter = grid[r][c];
+            cell.addEventListener('click', onCellClick);
+            wsGrid.appendChild(cell);
+        }
+    }
+
+    wsSelectedLetters = [];
+    wsSelectedCells = [];
+    wsSelected.textContent = '';
+    wsStatus.textContent = 'Tap the letters in order to spell the answer';
+    wsStatus.className = 'ws-status';
+}
+
+function onCellClick(e) {
+    if (wsSolved) return;
+    var cell = e.target;
+    var letter = cell.dataset.letter;
+
+    // Check if this cell is already selected — allow deselecting last cell
+    var cellIndex = wsSelectedCells.indexOf(cell);
+    if (cellIndex !== -1) {
+        if (cellIndex === wsSelectedCells.length - 1) {
+            // Deselect last letter
+            cell.classList.remove('selected');
+            wsSelectedCells.pop();
+            wsSelectedLetters.pop();
+            wsSelected.textContent = wsSelectedLetters.join('');
+            wsStatus.textContent = 'Tap the letters in order to spell the answer';
+            wsStatus.className = 'ws-status';
+        }
+        return;
+    }
+
+    // Add to selection
+    wsSelectedLetters.push(letter);
+    wsSelectedCells.push(cell);
+    cell.classList.add('selected');
+    wsSelected.textContent = wsSelectedLetters.join('');
+
+    var current = wsSelectedLetters.join('');
+
+    // Check if it matches
+    if (current === SECRET_WORD) {
+        wsSolved = true;
+        wsStatus.textContent = '🎉 You got it! Opening your letter...';
+        wsStatus.className = 'ws-status success';
+
+        // Mark all as found
+        wsSelectedCells.forEach(function (c) {
+            c.classList.remove('selected');
+            c.classList.add('found');
+        });
+
+        // After a short delay, close word search and open letter
+        setTimeout(function () {
+            wsOverlay.classList.remove('active');
+            document.body.style.overflow = '';
+            openLetter();
+        }, 1500);
+    } else if (current.length >= SECRET_WORD.length || SECRET_WORD.indexOf(current) !== 0) {
+        // Wrong — shake and reset
+        wsStatus.textContent = 'Not quite… try again! 💭';
+        wsStatus.className = 'ws-status';
+        setTimeout(function () {
+            wsSelectedCells.forEach(function (c) { c.classList.remove('selected'); });
+            wsSelectedLetters = [];
+            wsSelectedCells = [];
+            wsSelected.textContent = '';
+            wsStatus.textContent = 'Tap the letters in order to spell the answer';
+        }, 800);
+    }
+}
+
+function openWordSearch() {
+    if (wsSolved) {
+        // Already solved, go straight to letter
+        openLetter();
+        return;
+    }
+    generateWordSearch();
+    wsOverlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeWordSearch() {
+    wsOverlay.classList.remove('active');
+    document.body.style.overflow = '';
+}
+
 function openLetter() {
     if (envelopeOpen) return;
     envelopeOpen = true;
@@ -205,7 +337,16 @@ function closeLetter() {
 
 envelopeWrapper.addEventListener('click', function (e) {
     e.stopPropagation();
-    openLetter();
+    openWordSearch();
+});
+
+wsCloseBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    closeWordSearch();
+});
+
+wsOverlay.addEventListener('click', function (e) {
+    if (e.target === wsOverlay) closeWordSearch();
 });
 
 letterClose.addEventListener('click', function (e) {
@@ -218,7 +359,10 @@ letterOverlay.addEventListener('click', function (e) {
 });
 
 document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && envelopeOpen) closeLetter();
+    if (e.key === 'Escape') {
+        if (envelopeOpen) closeLetter();
+        else if (wsOverlay.classList.contains('active')) closeWordSearch();
+    }
 });
 
 // ===== FLOATING HEARTS & SUNFLOWERS =====
